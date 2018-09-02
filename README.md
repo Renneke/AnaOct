@@ -1,9 +1,5 @@
 # AnaOct
-AnaOct is an analytic circuit analysis tool for LTSpice circuits completly written with Octave.
-Just run the AnaOct file and select a netlist you want to analyse.
-The whole logic and helper functions are packed into one simple file for easy usage.
-The goal is to help analog designers in rapidly analyse new circuits, optimize filters,
-or just use it for educational purposes.
+AnaOct is an analytic circuit analysis tool for LTSpice circuits completely written with Octave. Just run the AnaOct file and select a netlist you want to analyze. The whole logic and helper functions are packed into one simple file for easy usage. The goal is to help analog designers in rapidly analyses new circuits, optimize filters, or just use it for educational purposes.
 
 # Dependencies
 Symbolic toolbox is required, which in turn needs Python and SymPy to run.
