@@ -58,6 +58,18 @@ function b = addB(b, val, i)
     b(i) = b(i) + val;
   end
 end
+
+% Find a device by its name
+function dev_id = getDeviceByName(name)
+    global devices;
+    dev_id = -1;
+    for(i=1:length(devices))
+          if(strcmp(devices{i}.name, name))
+              dev_id = i;
+              return;
+          end
+    end  
+end
 %%%%%%%%%%%%%%%%%% Helper Functions %%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -90,6 +102,7 @@ function device = readInV(line)
     data = textscan (line, '%s %s %s %s %s %s');
     device.nets = [getNetID(data{2}{1}), getNetID(data{3}{1})];
     device.add_ids = getAddIds(1);  % we want one additional row and column
+    device.name = data{1}{1};
     device.parameters = {data{1}{1}};
     device.type = 'V';
     device.match = 1;
@@ -123,6 +136,7 @@ function device = readInR(line)
   if(line(1) == 'R')
     data = textscan (line, '%s %s %s %s %s %s');
     device.nets = [getNetID(data{2}{1}), getNetID(data{3}{1})];
+    device.name = data{1}{1};
     device.add_ids = []; 
     device.parameters = {data{1}{1}};
     device.type = 'R';
@@ -151,6 +165,7 @@ function device = readInL(line)
   if(line(1) == 'L')
     data = textscan (line, '%s %s %s %s %s %s');
     device.nets = [getNetID(data{2}{1}), getNetID(data{3}{1})];
+    device.name = data{1}{1};
     device.add_ids = []; 
     device.parameters = {data{1}{1}};
     device.type = 'L';
@@ -179,6 +194,7 @@ function device = readInC(line)
   if(line(1) == 'C')
     data = textscan (line, '%s %s %s %s %s %s');
     device.nets = [getNetID(data{2}{1}), getNetID(data{3}{1})];
+    device.name = data{1}{1};
     device.add_ids = []; 
     device.parameters = {data{1}{1}};
     device.type = 'C';
@@ -209,6 +225,7 @@ function device = readInI(line)
   if(line(1) == 'I')
     data = textscan (line, '%s %s %s %s %s %s');
     device.nets = [getNetID(data{2}{1}), getNetID(data{3}{1})];
+    device.name = data{1}{1};
     device.add_ids = []; 
     device.parameters = {data{1}{1}};
     device.type = 'I';
@@ -256,6 +273,7 @@ function device = readInM(line)
     data = textscan (line, '%s %s %s %s %s %s');
     device.nets = [getNetID(data{2}{1}), getNetID(data{3}{1}), getNetID(data{4}{1})];
     device.add_ids = []; 
+    device.name = data{1}{1};
     device.parameters = {['gm_' data{1}{1}], ['gds_' data{1}{1}]};
     device.type = 'M';
         
@@ -302,6 +320,7 @@ function device = readInXU(line)
   if(line(1) == 'X' && line(2) == 'U')
     
     data = textscan (line, '%s %s %s %s %s %s %s %s');
+    device.name = data{1}{1};
     device.nets = [getNetID(data{2}{1}), getNetID(data{3}{1}), ...
                     getNetID(data{4}{1}), getNetID(data{5}{1}), ...
                     getNetID(data{6}{1})]; % + - VDD GND out
@@ -320,6 +339,81 @@ end
 
 
 
+%% -- Transformers K --
+
+function [M] = device_K_removeL(device, M)
+    y = ['1/(s*' device.parameters{1} ')'];
+    M = addM(M, ['-' y], device.nets(1),  device.nets(1));
+    M = addM(M, ['+' y], device.nets(1),  device.nets(2));
+    M = addM(M, ['+' y], device.nets(2),  device.nets(1));
+    M = addM(M, ['-' y], device.nets(2),  device.nets(2));  
+end
+
+function [M, b] = device_K_applyM(device, M, b)
+  global numNets;
+    
+    M = device_K_removeL(device.L1, M);
+    M = device_K_removeL(device.L2, M);
+    
+    L1 = device.L1.parameters{1};
+    L2 = device.L2.parameters{1};
+    
+    iadd_1 = numNets-1+device.add_ids(1);
+    iadd_2 = numNets-1+device.add_ids(2);
+     
+    M = addM(M, ['+1'], device.nets(1), iadd_1);
+    M = addM(M, ['-1'], device.nets(2), iadd_1);
+    M = addM(M, ['+1'], device.nets(3), iadd_2);
+    M = addM(M, ['-1'], device.nets(4), iadd_2);
+    
+    M = addM(M, ['+1'], iadd_1, device.nets(1));
+    M = addM(M, ['-1'], iadd_1, device.nets(2));
+    M = addM(M, ['+1'], iadd_2, device.nets(3));
+    M = addM(M, ['-1'], iadd_2, device.nets(4));
+    
+    M = addM(M, ['-s*' L1], iadd_1,  iadd_1);
+    M = addM(M, ['-s*' L2], iadd_2,  iadd_2);
+    M = addM(M, ['-s*' L1], iadd_1,  iadd_2);
+    M = addM(M, ['-s*' L2], iadd_2,  iadd_1);
+end
+
+
+function device = readInK(line)
+  global devices;
+  if(line(1) == 'K')
+    
+    data = textscan (line, '%s %s %s %s %s %s %s %s');
+    
+    device.name = data{1}{1};
+    
+    
+    % Look for the two inductors
+    L1_name = data{2}{1};
+    L2_name = data{3}{1};
+    L1_id = getDeviceByName(L1_name);
+    L2_id = getDeviceByName(L2_name);
+    L1 = devices{L1_id};
+    L2 = devices{L2_id};
+    device.L1 = L1;
+    device.L2 = L2;
+    
+    device.nets = [L1.nets L2.nets]; % + - VDD GND out
+    device.add_ids = getAddIds(2); 
+    device.parameters = {device.L1.parameters{1}, device.L2.parameters{1}, device.name};
+    device.type = 'K';
+           
+        
+    device.applyM = @(M,b) device_K_applyM(device, M, b);
+    device.match = 1;
+  else
+    device.match = 0;
+  end
+end
+
+
+
+
+
 
 % list of all read in functions of all devices
 devices_list = {@(line) readInV(line),...
@@ -328,7 +422,8 @@ devices_list = {@(line) readInV(line),...
                 @(line) readInR(line),...
                 @(line) readInL(line),...
                 @(line) readInC(line),...
-                @(line) readInM(line)};
+                @(line) readInM(line),...
+                @(line) readInK(line)};
                 
 %%%%%%%%%%%%%%%%%% Devices Definitions %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -438,7 +533,12 @@ function Latex(equ)
   l = strrep(l, '{', '%7B');
   l = strrep(l, '}', '%7D');
   l = strrep(l, ' ', '%20');
-  urlwrite(['https://latex.codecogs.com/gif.latex?' l], 'img.gif'); 
+  urlwrite(['https://latex.codecogs.com/gif.latex?%5Cdpi%7B300%7D%20%5Cbg_white%20%5Chuge%20' l], 'img.gif'); 
   imshow('img.gif');  
+end
+
+% Calculate and draw the bode diagram
+function bode(equ, var)
+  
 end
 %%%%%%%%%%%%%%%%%% Advanced Analyzing Functions %%%%%%%%%%%%%%%%%%%%%%%%%
