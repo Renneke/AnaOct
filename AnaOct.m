@@ -14,6 +14,8 @@ end
 global nets numNets;
 global numAddIds;
 global M b devices;
+global parameters;
+parameters = {};
 
 numNets = 1;
 function netId = getNetID(netname)
@@ -97,6 +99,7 @@ function [M, b] = device_V_applyM(device, M, b)
 end
 
 function device = readInV(line)
+      global parameters;
   
   if(line(1) == 'V')
     data = textscan (line, '%s %s %s %s %s %s');
@@ -108,6 +111,7 @@ function device = readInV(line)
     device.match = 1;
     if(~isempty(strfind(line, 'AC')))  
         device.AC = 1; 
+        parameters{end+1} = {data{1}{1}, '1'};
     else
         device.AC = 0;
     end
@@ -132,6 +136,7 @@ function [M, b] = device_R_applyM(device, M, b)
 end
 
 function device = readInR(line)
+      global parameters;
   
   if(line(1) == 'R')
     data = textscan (line, '%s %s %s %s %s %s');
@@ -140,6 +145,7 @@ function device = readInR(line)
     device.add_ids = []; 
     device.parameters = {data{1}{1}};
     device.type = 'R';
+    parameters{end+1} = {data{1}{1}, data{4}{1}};
     device.applyM = @(M,b) device_R_applyM(device, M, b);
     device.match = 1;
   else
@@ -161,6 +167,7 @@ function [M, b] = device_L_applyM(device, M, b)
 end
 
 function device = readInL(line)
+      global parameters;
   
   if(line(1) == 'L')
     data = textscan (line, '%s %s %s %s %s %s');
@@ -169,6 +176,7 @@ function device = readInL(line)
     device.add_ids = []; 
     device.parameters = {data{1}{1}};
     device.type = 'L';
+    parameters{end+1} = {data{1}{1}, data{4}{1}};
     device.applyM = @(M,b) device_L_applyM(device, M, b);
     device.match = 1;
   else
@@ -190,6 +198,7 @@ function [M, b] = device_C_applyM(device, M, b)
 end
 
 function device = readInC(line)
+      global parameters;
   
   if(line(1) == 'C')
     data = textscan (line, '%s %s %s %s %s %s');
@@ -198,6 +207,7 @@ function device = readInC(line)
     device.add_ids = []; 
     device.parameters = {data{1}{1}};
     device.type = 'C';
+    parameters{end+1} = {data{1}{1}, data{4}{1}};
     device.applyM = @(M,b) device_C_applyM(device, M, b);
     device.match = 1;
   else
@@ -221,6 +231,7 @@ function [M, b] = device_I_applyM(device, M, b)
 end
 
 function device = readInI(line)
+      global parameters;
   
   if(line(1) == 'I')
     data = textscan (line, '%s %s %s %s %s %s');
@@ -229,6 +240,8 @@ function device = readInI(line)
     device.add_ids = []; 
     device.parameters = {data{1}{1}};
     device.type = 'I';
+    parameters{end+1} = {['gm_' data{1}{1}], '1u'};
+    parameters{end+1} = {['gds_' data{1}{1}], '0.1u'};
     
     if(~isempty(strfind(line, 'AC')))  
         device.AC = 1; 
@@ -267,6 +280,7 @@ function [M, b] = device_M_applyM(device, M, b)
 end
 
 function device = readInM(line)
+      global parameters;
   
   if(line(1) == 'M')
     
@@ -316,6 +330,7 @@ function [M, b] = device_XU_applyM(device, M, b)
 end
 
 function device = readInXU(line)
+      global parameters;
   
   if(line(1) == 'X' && line(2) == 'U')
     
@@ -351,6 +366,7 @@ end
 
 function [M, b] = device_K_applyM(device, M, b)
   global numNets;
+    global parameters;
     
     M = device_K_removeL(device.L1, M);
     M = device_K_removeL(device.L2, M);
@@ -431,8 +447,11 @@ devices_list = {@(line) readInV(line),...
 
 
 
+
+
+
 %%%%%%%%%%%%%%%%%% Read Netlist %%%%%%%%%%%%%%%%%%%%%%%%%
-fid = fopen (netlist);
+fid = fopen (netlist, 'r', 'ieee-be');
 
 devices = {};
 
@@ -482,10 +501,41 @@ end
 
 
 
+%%%%%%%%%%%%%%%%%% Translate Parameter Units/Default Values %%%%%%%%%%
+for(i=1:length(parameters))
+
+  parameters{i}(3) = eval(parameters{i}(1){1});
+  
+  if(int32(parameters{i}{2}(end)) == 181)
+      parameters{i}{2}(end) = [];
+      parameters{i}{2} = [parameters{i}{2} 'e-6'];
+  end
+  
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "n", "e-9");
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "a", "e-15");
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "p", "e-12");
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "f", "e-15");
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "k", "e3");
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "m", "e-3");
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "Meg", "e6");
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "G", "e9");
+  parameters{i}(2) = strrep(parameters{i}(2){1}, "T", "e12");
+
+  parameters{i}{2} = str2num(parameters{i}{2});
+end
+%%%%%%%%%%%%%%%%%% Translate Parameter Units/Default Values %%%%%%%%%%
+
+
+
+
+
+
 %%%%%%%%%%%%%%%%%% Solve %%%%%%%%%%%%%%%%%%%%%%%%%
-
-V = simplify(M\b);
-
+global V;
+function solveMNA()
+  global V M b;
+  V = simplify(M\b);
+end
 %%%%%%%%%%%%%%%%%% Solve %%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -493,7 +543,6 @@ V = simplify(M\b);
 
 
 %%%%%%%%%%%%%%%%%% Advanced Analyzing Functions %%%%%%%%%%%%%%%%%%%%%%%%%
-
 
 %% Calculate all the input/output resistances
 %% of all nets which are named (in..., out...)
@@ -537,8 +586,4 @@ function Latex(equ)
   imshow('img.gif');  
 end
 
-% Calculate and draw the bode diagram
-function bode(equ, var)
-  
-end
 %%%%%%%%%%%%%%%%%% Advanced Analyzing Functions %%%%%%%%%%%%%%%%%%%%%%%%%
