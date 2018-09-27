@@ -54,4 +54,13 @@ Vp = limit(Vp, L1, sym(inf));
 
 Vn = limit(V(nets.Vn), C1, sym(inf));
 Vn = limit(Vn, L1, sym(inf));
+
+% Print Latex Equations
+figure(1);
+clf;
+subplot(2,1,1);
+Latex(Vp);
+subplot(2,1,2);
+Latex(Vn);
+
 ```
