@@ -18,7 +18,7 @@ Latex(equ) - It converts any given equation into a latex image and displays it. 
 
 # Example
 
-```
+```Matlab
 % Coupler Example
 %V1 N001 0 1 AC 1
 %L1 N004 N003 1
